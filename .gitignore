@@ -1,7 +1,9 @@
 # data images
-*.png
-*.jpg
-*.jpeg
+# *.png
+# *.jpg
+# *.jpeg
+
+# data dir instead
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
