@@ -8,10 +8,41 @@ import os
 import torch.nn as nn
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
+from torchvision import datasets, transforms
 
-from ShapeDataset import ShapeDataset
-from shape_dataset_files import load_shape_dataset
-from model_utils import save_model_state
+from dataset_2d import ShapeDataset
+from utils_model import save_model_state
+
+Eps = 50
+device = "cpu"
+
+import torch
+from torch.utils.data import DataLoader, random_split
+
+def load_shape_dataset(data_dir="data/combined", batch_size=32):
+    # Load your full dataset
+    transform = transforms.Compose([
+        transforms.Resize((64, 64)),
+        transforms.ToTensor()
+    ])
+
+    dataset = datasets.ImageFolder("data/combined", transform=transform)
+
+    # 80/20 train-test split
+    total_size = len(dataset)
+    train_size = int(0.8 * total_size)
+    test_size = total_size - train_size
+
+    # For reproducibility (always same split each run)
+    generator = torch.Generator().manual_seed(42)
+    train_dataset, test_dataset = random_split(dataset, [train_size, test_size], generator=generator)
+
+    # DataLoaders
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+
+    return dataset, train_loader, test_loader
+
 
 # define model
 class ShapeCNN(nn.Module):
@@ -30,9 +61,45 @@ class ShapeCNN(nn.Module):
         x = F.relu(self.fc1(x))
         return self.fc2(x)
 
+def interactive_eval(model, test_loader, dataset, device='cpu'):
+    model.eval()
+    imgs, labels = next(iter(test_loader))
+    imgs, labels = imgs.to(device), labels.to(device)
+
+    with torch.no_grad():
+        preds = model(imgs).argmax(dim=1)
+
+    total = len(imgs)
+    index = [0]  # mutable container for closure
+
+    fig, ax = plt.subplots(figsize=(4, 4))
+    plt.subplots_adjust(bottom=0.25)
+
+    def show_image(i):
+        ax.clear()
+        img = np.transpose(imgs[i].cpu().numpy(), (1, 2, 0))
+        ax.imshow(img)
+        p, t = dataset.classes[preds[i]], dataset.classes[labels[i]]
+        ax.set_title(f"Index: {i}\nPredicted: {p}\nTrue: {t}")
+        ax.axis('off')
+        fig.canvas.draw_idle()
+
+    def on_key(event):
+        if event.key == 'right':
+            index[0] = (index[0] + 1) % total
+        elif event.key == 'left':
+            index[0] = (index[0] - 1) % total
+        show_image(index[0])
+
+    fig.canvas.mpl_connect('key_press_event', on_key)
+    show_image(index[0])
+    plt.show()
+
+# ______________start main__________
+
 # generate synth dataset
 # generate_shape_dataset(root_dir="data/shapes", num_per_class=500)
-dataset, train_loader = load_shape_dataset()
+dataset, train_loader, test_loader = load_shape_dataset()
 
 print("Classes:", dataset.classes)
 print("Class indices:", dataset.class_to_idx)
@@ -43,7 +110,7 @@ optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 criterion = nn.CrossEntropyLoss()
 
 # train
-for epoch in range(50):
+for epoch in range( Eps ):
     total_loss = 0
     for imgs, labels in train_loader:
         optimizer.zero_grad()
@@ -54,13 +121,10 @@ for epoch in range(50):
         total_loss += loss.item()
     print(f"Epoch {epoch+1}: loss={total_loss/len(train_loader):.4f}")
 
-# test
-# use internal class generator to load test data
-# todo add out of distribution (octagons)
-testSet = ShapeDataset(num_samples=2000, img_size=64)
-test_loader = DataLoader(dataset, batch_size=32, shuffle=True)
-
 # eval
+interactive_eval(model, test_loader, dataset, device)
+
+
 model.eval()
 imgs, labels = next(iter(test_loader))
 with torch.no_grad():
@@ -74,5 +138,6 @@ for i, ax in enumerate(axes.flat):
     ax.axis('off')
 plt.show()
 
-save_model_state(model, "4classes_2000samp_50epochs.pth") # torch.save(model.state_dict(), path)
+save_model_state(model, f"8classes_{Eps}epochs.pth")
+# torch.save(model.state_dict(), path)
 
