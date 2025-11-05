@@ -36,17 +36,3 @@ def generate_shape_dataset(
             img.save(os.path.join(shape_dir, f"{shape_type}_{i:05d}.png"))
 
     print(f"✅ Dataset created at {os.path.abspath(root_dir)}")
-
-def load_shape_dataset():
-    transform = transforms.Compose([
-        transforms.Resize((64, 64)),
-        transforms.ToTensor()
-    ])
-
-    dataset = datasets.ImageFolder("data/shapes", transform=transform)
-    train_loader = DataLoader(dataset, batch_size=32, shuffle=True)
-
-    # print("Classes:", dataset.classes)
-    # print("Number of images:", len(dataset))
-
-    return dataset, train_loader
